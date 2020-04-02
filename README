@@ -150,7 +150,7 @@ file formats: convert the input file to binary format using fileConvert.
 2. Run distributed parallel Louvain algorithm (graphClustering binary) 
 using the binary file created in Step #0:
 
-mpiexec -n 2 bin/./graphClustering -c -i -f karate.bin
+mpiexec -n 2 bin/./graphClustering -c 2 -i -f karate.bin
 
 Possible options (can be combined):
 
