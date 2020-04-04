@@ -2440,7 +2440,7 @@ void fillRemoteCommunities(const DistGraph &dg, const int me, const int nprocs,
 #else
   std::vector<MPI_Request> rreqs(nprocs), sreqs(nprocs);
   for (int i = 0; i < nprocs; i++) {
-    if (i != me)
+    if (i != me && (rsizes[i] > 0))
       MPI_Irecv(rcdata.data() + rpos, rsizes[i], MPI_GRAPH_TYPE, i, 
               CommunityTag, MPI_COMM_WORLD, &rreqs[i]);
     else
@@ -2449,7 +2449,7 @@ void fillRemoteCommunities(const DistGraph &dg, const int me, const int nprocs,
     rpos += rsizes[i];
   }
   for (int i = 0; i < nprocs; i++) {
-    if (i != me)
+    if (i != me && (ssizes[i] > 0))
       MPI_Isend(scdata.data() + spos, ssizes[i], MPI_GRAPH_TYPE, i, 
               CommunityTag, MPI_COMM_WORLD, &sreqs[i]);
     else
@@ -2612,16 +2612,25 @@ void fillRemoteCommunities(const DistGraph &dg, const int me, const int nprocs,
                   MPI_COMM_WORLD, MPI_STATUSES_IGNORE);
 #endif
 #else
-          MPI_Irecv(rcomms.data() + rpos, rcsizes[i], MPI_GRAPH_TYPE, i, 
-                  CommunityTag, MPI_COMM_WORLD, &rreqs[i]);
+          if (rcsizes[i] > 0) {
+              MPI_Irecv(rcomms.data() + rpos, rcsizes[i], MPI_GRAPH_TYPE, i, 
+                      CommunityTag, MPI_COMM_WORLD, &rreqs[i]);
+          }
+          else
+              rreqs[i] = MPI_REQUEST_NULL;
+
+          if (scsizes[i] > 0) {
 #if defined(REPLACE_STL_UOSET_WITH_VECTOR)
-          MPI_Isend(rcinfo[i].data(), scsizes[i], MPI_GRAPH_TYPE, i, 
-                  CommunityTag, MPI_COMM_WORLD, &sreqs[i]);
+              MPI_Isend(rcinfo[i].data(), scsizes[i], MPI_GRAPH_TYPE, i, 
+                      CommunityTag, MPI_COMM_WORLD, &sreqs[i]);
 #else
-          std::copy(rcinfo[i].begin(), rcinfo[i].end(), scomms.data() + spos);
-          MPI_Isend(scomms.data() + spos, scsizes[i], MPI_GRAPH_TYPE, i, 
-                  CommunityTag, MPI_COMM_WORLD, &sreqs[i]);
+              std::copy(rcinfo[i].begin(), rcinfo[i].end(), scomms.data() + spos);
+              MPI_Isend(scomms.data() + spos, scsizes[i], MPI_GRAPH_TYPE, i, 
+                      CommunityTag, MPI_COMM_WORLD, &sreqs[i]);
 #endif
+          }
+          else
+              sreqs[i] = MPI_REQUEST_NULL;
 #endif
       }
       else {
@@ -2667,8 +2676,11 @@ void fillRemoteCommunities(const DistGraph &dg, const int me, const int nprocs,
                   rinfo.data() + spos, scsizes[i], commType, i, CommunityDataTag, 
                   MPI_COMM_WORLD, MPI_STATUSES_IGNORE);
 #else
-          MPI_Irecv(rinfo.data() + spos, scsizes[i], commType, i, CommunityDataTag, 
-                  MPI_COMM_WORLD, &rcreqs[i]);
+          if (scsizes[i] > 0) {
+              MPI_Irecv(rinfo.data() + spos, scsizes[i], commType, i, CommunityDataTag, 
+                      MPI_COMM_WORLD, &rcreqs[i]);
+          } else
+              rcreqs[i] = MPI_REQUEST_NULL;
 
           // poke progress on last isend/irecvs
 #if defined(POKE_PROGRESS_FOR_COMMUNITY_SENDRECV_IN_LOOP)
@@ -2693,8 +2705,12 @@ void fillRemoteCommunities(const DistGraph &dg, const int me, const int nprocs,
               sinfo[rpos + j] = {comm, localCinfo[comm-base].size, localCinfo[comm-base].degree};
           }
 
-          MPI_Isend(sinfo.data() + rpos, rcsizes[i], commType, i, CommunityDataTag, 
-                  MPI_COMM_WORLD, &sreqs[i]);
+          if (rcsizes[i] > 0) {
+              MPI_Isend(sinfo.data() + rpos, rcsizes[i], commType, i, CommunityDataTag, 
+                      MPI_COMM_WORLD, &sreqs[i]);
+          }
+          else
+              sreqs[i] = MPI_REQUEST_NULL;
 #endif
       }
       else {
@@ -2851,7 +2867,7 @@ void updateRemoteCommunities(const DistGraph &dg, CommVector &localCinfo,
 #else
   std::vector<MPI_Request> sreqs(nprocs), rreqs(nprocs);
   for (int i = 0; i < nprocs; i++) {
-    if (i != me)
+    if (i != me && (recv_sz[i] > 0))
       MPI_Irecv(rdata.data() + currPos, recv_sz[i], commType, i, 
               CommunityDataTag, MPI_COMM_WORLD, &rreqs[i]);
     else
@@ -2861,7 +2877,7 @@ void updateRemoteCommunities(const DistGraph &dg, CommVector &localCinfo,
   }
 
   for (int i = 0; i < nprocs; i++) {
-    if (i != me)
+    if (i != me && (send_sz[i] > 0))
       MPI_Isend(remoteArray[i].data(), send_sz[i], commType, i, 
               CommunityDataTag, MPI_COMM_WORLD, &sreqs[i]);
     else
@@ -3013,7 +3029,7 @@ void exchangeVertexReqs(const DistGraph &dg, size_t &ssz, size_t &rsz,
 #else
   std::vector<MPI_Request> rreqs(nprocs), sreqs(nprocs);
   for (int i = 0; i < nprocs; i++) {
-      if (i != me)
+      if (i != me && (rsizes[i] > 0))
           MPI_Irecv(rvdata.data() + rpos, rsizes[i], MPI_GRAPH_TYPE, i, VertexTag, MPI_COMM_WORLD,
                   &rreqs[i]);
       else
