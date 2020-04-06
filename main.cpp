@@ -104,9 +104,20 @@ static bool  isGroundTruthZeroBased     = true;
 // parse command line parameters
 static void parseCommandLine(const int argc, char * const argv[]);
 
+double t_load_n_dist_input;
+double t_init_louvain;
+double t_exchange_vertex_reqs;
+double t_fill_remote_comm;
+double t_louvain_comp;
+double t_update_remote_comm;
+double t_mod_comp;
+double t_state_update;
+double t_compact_graph;
+
 int main(int argc, char *argv[])
 {
   double t0, t1, t2, t3;
+  double t_start;
   
   MPI_Init(&argc, &argv);
 
@@ -160,6 +171,7 @@ int main(int argc, char *argv[])
 
   GraphElem teps = 0;
 
+  t_start = MPI_Wtime();
   // load the input data file and distribute data   
   if (generateGraph) {
       generateInMemGraph(me, nprocs, dg, numVerticesGenGraph, randomEdgePercent);
@@ -170,6 +182,7 @@ int main(int argc, char *argv[])
       else
           loadDistGraphMPIIO(me, nprocs, ranksPerNode, dg, inputFileName);
   }
+  t_load_n_dist_input = MPI_Wtime() - t_start;
 
   MPI_Barrier(MPI_COMM_WORLD);
  
@@ -223,6 +236,18 @@ int main(int argc, char *argv[])
   if (me == 0 && (outputFiles || compareCommunities))
       commAll.resize(nv, -1);
 
+  /* Initialize timers */
+  t_init_louvain = 0;
+  t_exchange_vertex_reqs = 0;
+  t_fill_remote_comm = 0;
+  t_louvain_comp = 0;
+  t_update_remote_comm = 0;
+  t_mod_comp = 0;
+  t_state_update = 0;
+  t_compact_graph = 0;
+
+  int num_graph_compacts = 0;
+  
   MPI_Barrier(MPI_COMM_WORLD);
 
   // outermost loop
@@ -414,8 +439,11 @@ int main(int argc, char *argv[])
         if (!runOnePhase) {
             t3 = MPI_Wtime();
 
+            num_graph_compacts++;
+            t_start = MPI_Wtime();
             distbuildNextLevelGraph(nprocs, me, dg, ssz, rsz, 
                     ssizes, rsizes, svdata, rvdata, cvect);
+            t_compact_graph += (MPI_Wtime() - t_start);
 
             t2 = MPI_Wtime();
 
@@ -501,7 +529,26 @@ int main(int argc, char *argv[])
   MPI_Barrier(MPI_COMM_WORLD);
   
   double tot_time = 0.0;
+  double tot_load_n_dist_input = 0.0;
+  double tot_init_louvain = 0.0;
+  double tot_exchange_vertex_reqs = 0.0;
+  double tot_fill_remote_comm = 0.0;
+  double tot_louvain_comp = 0.0;
+  double tot_update_remote_comm = 0.0;
+  double tot_mod_comp = 0.0;
+  double tot_state_update = 0.0;
+  double tot_compact_graph = 0.0;
+
   MPI_Reduce(&total, &tot_time, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_load_n_dist_input, &tot_load_n_dist_input, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_init_louvain, &tot_init_louvain, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_exchange_vertex_reqs, &tot_exchange_vertex_reqs, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_fill_remote_comm, &tot_fill_remote_comm, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_louvain_comp, &tot_louvain_comp, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_update_remote_comm, &tot_update_remote_comm, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_mod_comp, &tot_mod_comp, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_compact_graph, &tot_compact_graph, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_state_update, &tot_state_update, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   
   if(me == 0) {
 #if defined(DONT_CREATE_DIAG_FILES)
@@ -511,6 +558,13 @@ int main(int argc, char *argv[])
       ofs<< "TERMINATE TIME: "<< total<<std::endl;
       ofs<< "TEPS: " << (double)teps/(double)(tot_time/nprocs) <<std::endl;
 #endif
+      printf("%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\n","Load_n_dist","Num_phases",
+              "Num_tot_iters","Total","Fill_remote","Louvain_iter","Update_remote","Mod_comp","State_update",
+              "Graph_compact");
+      printf("%-10.9f\t%-10d\t%-10d\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\n",
+              tot_load_n_dist_input/nprocs,num_graph_compacts,tot_iters,tot_time/nprocs,tot_fill_remote_comm/nprocs,
+              tot_louvain_comp/nprocs,tot_update_remote_comm/nprocs,tot_mod_comp/nprocs,tot_state_update/nprocs,
+              tot_compact_graph/nprocs);
   }
 
   // dump community information in a file    

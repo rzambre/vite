@@ -53,6 +53,16 @@ typedef std::map<GraphElem, Comm> CommMap;
 typedef std::unordered_map<GraphElem, GraphElem> ClusterLocalMap;
 #endif
 
+extern double t_load_n_dist_input;
+extern double t_init_louvain;
+extern double t_exchange_vertex_reqs;
+extern double t_fill_remote_comm;
+extern double t_louvain_comp;
+extern double t_update_remote_comm;
+extern double t_mod_comp;
+extern double t_state_update;
+extern double t_compact_graph;
+
 const int SizeTag = 1;
 const int VertexTag = 2;
 const int CommunityTag = 3;

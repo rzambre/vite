@@ -438,6 +438,8 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const DistGraph &d
   
   VertexCommMap remoteComm;
   CommMap remoteCinfo, remoteCupdate;
+
+  double t_start;
   
   const Graph &g = dg.getLocalGraph();
   const GraphElem tnv = dg.getTotalNumVertices();
@@ -449,10 +451,12 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const DistGraph &d
   GraphWeight prevMod = lower;
   GraphWeight currMod = -1.0;
   int numIters = 0;
- 
+  
+  t_start = MPI_Wtime();
   distInitLouvain(dg, pastComm, currComm, vDegree, clusterWeight, localCinfo, 
           localCupdate, constantForSecondTerm, me);
   targetComm.resize(nv);
+  t_init_louvain += (MPI_Wtime() - t_start);
 
 #ifdef DEBUG_PRINTF  
   ofs << "constantForSecondTerm: " << constantForSecondTerm << std::endl;
@@ -463,8 +467,10 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const DistGraph &d
   double t0, t1;
   t0 = MPI_Wtime();
 #endif
+  t_start = MPI_Wtime();
   exchangeVertexReqs(dg, ssz, rsz, ssizes, rsizes, 
           svdata, rvdata, me, nprocs);
+  t_exchange_vertex_reqs += (MPI_Wtime() - t_start);
 #ifdef DEBUG_PRINTF  
   t1 = MPI_Wtime();
   ofs << "Initial communication setup time: " << (t1 - t0) << std::endl;
@@ -481,9 +487,11 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const DistGraph &d
     t0 = MPI_Wtime();
 #endif
 
+    t_start = MPI_Wtime();
     fillRemoteCommunities(dg, me, nprocs, ssz, rsz, ssizes, 
             rsizes, svdata, rvdata, currComm, localCinfo, 
             remoteCinfo, remoteComm, remoteCupdate);
+    t_fill_remote_comm += (MPI_Wtime() - t_start);
 
 #ifdef DEBUG_PRINTF  
     t1 = MPI_Wtime();
@@ -494,6 +502,7 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const DistGraph &d
 #ifdef DEBUG_PRINTF  
     t0 = MPI_Wtime();
 #endif
+    t_start = MPI_Wtime();
 #pragma omp parallel default(none)\
     shared(clusterWeight, localCupdate, currComm, targetComm, \
         vDegree, localCinfo, remoteCinfo, remoteComm, pastComm, dg, remoteCupdate), \
@@ -523,18 +532,23 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const DistGraph &d
     {
         distUpdateLocalCinfo(localCinfo, localCupdate);
     }
+    t_louvain_comp += (MPI_Wtime() - t_start);
 
 #ifdef DEBUG_PRINTF  
     t0 = MPI_Wtime();
 #endif
+    t_start = MPI_Wtime();
     updateRemoteCommunities(dg, localCinfo, remoteCupdate, me, nprocs);
+    t_update_remote_comm += (MPI_Wtime() - t_start);
 #ifdef DEBUG_PRINTF  
     t1 = MPI_Wtime();
     ofs << "Update remote communities communication time: " << (t1 - t0) << std::endl;
     t0 = MPI_Wtime();
 #endif
 
+    t_start = MPI_Wtime();
     currMod = distComputeModularity(g, localCinfo, clusterWeight, constantForSecondTerm, me);
+    t_mod_comp += (MPI_Wtime() - t_start);
 
 #ifdef DEBUG_PRINTF  
     t1 = MPI_Wtime();
@@ -548,6 +562,7 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const DistGraph &d
         break;
     }
 
+    t_start = MPI_Wtime();
     prevMod = currMod;
 
     if (prevMod < lower)
@@ -568,6 +583,7 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const DistGraph &d
         currComm[i] = targetComm[i];
         targetComm[i] = tmp;
     }
+    t_state_update += (MPI_Wtime() - t_start);
 
 #ifdef DEBUG_PRINTF  
     t1 = MPI_Wtime();
